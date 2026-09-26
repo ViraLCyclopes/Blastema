@@ -63,21 +63,29 @@ class Dump:
         missing = [(n, c) for n, c in counts.items() if not self.defines(n)]
         return sorted(missing, key=lambda pair: (-pair[1], pair[0]))
 
-    def consumers(self, base: str) -> list[tuple[str, str, int]]:
-        """Entries with a child rooted on `base`.
+    def consumers(self, base: str) -> list[tuple[str, str | None, int]]:
+        """Everything that inherits `base`, as a child OR at its own root.
 
-        Returns (entry, child_name, override_size) sorted by the SMALLEST
+        Returns (entry, child_name_or_None, override_size) sorted by SMALLEST
         override, because the fewer local overrides a consumer applies, the
-        closer its flattened child is to the base itself.
+        closer its flattened form is to the base itself.
+
+        Root inheritors matter: a base only ever used as a root parent - like
+        FoodBaseSingleGoalpoint, which `foodbasesinglemodel` roots on - has no
+        child anywhere, and searching only children finds nothing at all.  For
+        those, FindPrefab on the inheritor itself returns the flattened base.
         """
         needle = "Prefab = '%s'" % base
-        found: list[tuple[str, str, int]] = []
+        found: list[tuple[str, str | None, int]] = []
         for entry in self._entries:
             block = self.block(entry)
             if block is None or needle not in block:
                 continue
             for child, body in self._children_using(block, needle):
                 found.append((entry, child, len(body)))
+            # root-level: `Prefab = '<base>'` at one tab, i.e. on the entry itself
+            if re.search(r"^\t%s,?$" % re.escape(needle), block, re.M):
+                found.append((entry, None, len(block)))
         return sorted(found, key=lambda row: row[2])
 
     @staticmethod

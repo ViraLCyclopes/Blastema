@@ -128,13 +128,21 @@ end
 
 def build_intersect_request(request_id: int, sources: list[tuple[str, str]]) -> str:
     """Read several consumers and serialise only what they all share."""
-    lookups = "\n".join(
-        "        do local p = api.entity.FindPrefab('%s')\n"
-        "           local n = p and p.Children and p.Children['%s']\n"
-        "           if n == nil then out('ERR missing %s/%s') return end\n"
-        "           nodes[#nodes+1] = n end" % (entry, child, entry, child)
-        for entry, child in sources
-    )
+    def one(entry: str, child: str | None) -> str:
+        if child:
+            fetch = "local n = p and p.Children and p.Children['%s']" % child
+            label = "%s/%s" % (entry, child)
+        else:
+            # root inheritor: the entry itself IS the flattened base plus its
+            # own overrides, so read the prefab rather than a child of it
+            fetch = "local n = p"
+            label = entry
+        return ("        do local p = api.entity.FindPrefab('%s')\n"
+                "           %s\n"
+                "           if n == nil then out('ERR missing %s') return end\n"
+                "           nodes[#nodes+1] = n end" % (entry, fetch, label))
+
+    lookups = "\n".join(one(entry, child) for entry, child in sources)
     return (
         "return {\n"
         "    id = %d,\n"

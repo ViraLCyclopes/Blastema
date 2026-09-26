@@ -29,7 +29,20 @@ share came from the base.
 
 Consumers are ranked by smallest local override, so the closest sources go first.
 
+A base is found whether it is inherited **as a child** or **at an inheritor's
+root**.  The root case matters: `FoodBaseSingleGoalpoint` and
+`BLDG_BaseGameplay_NoSupply` are never used as a child anywhere, so searching
+only children finds nothing at all for them.
+
 ## Usage
+
+    python gui.py                                  # browse the dump
+
+Opens the dump from the game root, lists every engine-side prefab with its
+reference count, filterable, and shows where each one's content can be read
+from.  The Reconstruct button needs the game loaded into a world.
+
+Or from the command line:
 
     python reconstruct.py census --min-refs 10     # offline
     python reconstruct.py plan  BLDG_PathJoinPoint # offline

@@ -51,11 +51,13 @@ def cmd_plan(dump: Dump, args) -> int:
         return 1
     print("\nbest sources (smallest local override wins):")
     for entry, child, size in rows[:8]:
-        print("  %-46s child=%-24s override=%dB" % (entry, child, size))
+        print("  %-46s %-30s override=%dB" % (
+            entry, ("child=" + child) if child else "(root inheritor)", size))
     picked = rows[:3]
     print("\nwould intersect these %d, keeping only what they all agree on:" % len(picked))
     for entry, child, _ in picked:
-        print("   FindPrefab('%s').Children['%s']" % (entry, child))
+        print("   FindPrefab('%s')%s" % (
+            entry, (".Children['%s']" % child) if child else "   (root inheritor)"))
     print("\nA key two consumers disagree on is that consumer's own override;")
     print("a key they all share came from the base.")
     return 0
@@ -123,7 +125,7 @@ def cmd_build(dump: Dump, args) -> int:
     sources = [(entry, child) for entry, child, _ in rows[:args.sources]]
     print("reading %d consumers and keeping only what they agree on:" % len(sources))
     for entry, child in sources:
-        print("   %s / %s" % (entry, child))
+        print("   %s%s" % (entry, (" / " + child) if child else "   (root inheritor)"))
     request_id = random.randint(900000, 998000)
     body = probe.run(request_id, None, None, sources=sources)
     header, _, body = body.partition("\n") if body.startswith("SOURCES") else ("", "", body)
