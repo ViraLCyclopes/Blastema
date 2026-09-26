@@ -13,6 +13,7 @@ sidesteps the MCP payload limit, which a whole prefab subtree can exceed.
 from __future__ import annotations
 
 import os
+import random
 import re
 import time
 
@@ -61,9 +62,22 @@ ser = function(v, indent, out)
         for k, _ in pairs(v) do
             if type(k) == "number" then arr[#arr+1] = k else keys[#keys+1] = k end
         end
-        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        -- House order, the way every shipped prefab reads: Prefab, Components,
+        -- Children, Properties, then whatever else alphabetically.  Alphabetical
+        -- throughout is the giveaway that a file was generated.
+        local rank = { Prefab = 1, Components = 2, Children = 3, Properties = 4 }
+        table.sort(keys, function(a, b)
+            local ra, rb = rank[a] or 9, rank[b] or 9
+            if ra ~= rb then return ra < rb end
+            return tostring(a) < tostring(b)
+        end)
         table.sort(arr)
-        if #keys == 0 and #arr == 0 then out[#out+1] = "{}" return end
+        -- Empty tables are written open-brace / blank line / close-brace,
+        -- never {}.
+        if #keys == 0 and #arr == 0 then
+            out[#out+1] = "{\n\n" .. string.rep("    ", indent) .. "}"
+            return
+        end
         out[#out+1] = "{\n"
         local pad = string.rep("    ", indent + 1)
         for _, k in ipairs(arr) do
@@ -151,14 +165,31 @@ def build_intersect_request(request_id: int, sources: list[tuple[str, str]]) -> 
         "        local nodes = {}\n"
         "%s\n"
         "        local merged, dropped = intersect(nodes)\n"
-        "        out('SOURCES %d DROPPED ' .. tostring(dropped))\n"
         "        local buf = {}\n"
         "        ser(merged, 0, buf)\n"
-        "        local s = table.concat(buf)\n"
-        "        for i = 1, #s, 900 do out('CHUNK' .. s:sub(i, i + 899)) end\n"
-        "        out('ENDCHUNK')\n"
+        "        _G.VLPR_BUF = table.concat(buf)\n"
+        "        out('LEN ' .. #_G.VLPR_BUF .. ' DROPPED ' .. tostring(dropped))\n"
         "    end\n"
-        "}\n" % (request_id, SERIALISER, INTERSECT, lookups, len(sources))
+        "}\n" % (request_id, SERIALISER, INTERSECT, lookups)
+    )
+
+
+# VLBridge truncates any response over 8000 characters and appends
+# "...<truncated>".  A prefab can easily serialise past that, so the text is
+# stashed in a global and pulled back in slices well under the cap.
+SLICE = 6000
+TRUNCATION_MARKER = "...<truncated>"
+
+
+def build_slice_request(request_id: int, start: int) -> str:
+    return (
+        "return {\n"
+        "    id = %d,\n"
+        "    run = function(out)\n"
+        "        local s = _G.VLPR_BUF or ''\n"
+        "        out('SLICE' .. s:sub(%d, %d))\n"
+        "    end\n"
+        "}\n" % (request_id, start, start + SLICE - 1)
     )
 
 
@@ -214,8 +245,15 @@ def run(request_id: int, entry: str, child: str | None = None,
                 body = body[3:]
             if "ERR " in body:
                 raise RuntimeError(body.strip())
+            if TRUNCATION_MARKER in body:
+                raise RuntimeError(
+                    "the bridge truncated its reply at 8000 characters. "
+                    "This should not happen - the text is fetched in slices."
+                )
+            if sources:
+                return _fetch_slices(body, timeout)
             parts = re.findall(r"CHUNK(.*?)(?=CHUNK|ENDCHUNK|$)", body, re.S)
-            text = "".join(parts).replace("\\n", "\n").replace("\\t", "\t")
+            text = _unescape("".join(parts))
             if not text.strip():
                 raise RuntimeError("probe returned nothing: " + body[:200])
             return text
@@ -223,3 +261,46 @@ def run(request_id: int, entry: str, child: str | None = None,
         "no response for id %d in %.0fs - is the game running and in a world?"
         % (request_id, timeout)
     )
+
+
+def _unescape(text: str) -> str:
+    return text.replace("\\n", "\n").replace("\\t", "\t")
+
+
+def _fetch_slices(header: str, timeout: float) -> str:
+    """Pull `_G.VLPR_BUF` back in pieces small enough to survive the cap."""
+    match = re.search(r"LEN (\d+)", header)
+    if not match:
+        raise RuntimeError("expected a LEN header, got: " + header[:200])
+    total = int(match.group(1))
+    if total == 0:
+        raise RuntimeError("the game serialised nothing")
+    pieces: list[str] = []
+    start = 1
+    while start <= total:
+        request_id = random.randint(100000, 899999)
+        marker = "VLBRIDGE_RESP|%d|" % request_id
+        before = os.path.getsize(LOG_FILE)
+        with open(REQUEST_FILE, "w", encoding="utf-8") as handle:
+            handle.write(build_slice_request(request_id, start))
+        deadline = time.time() + timeout
+        got = None
+        while time.time() < deadline:
+            time.sleep(0.4)
+            with open(LOG_FILE, encoding="utf-8", errors="replace") as handle:
+                handle.seek(before)
+                tail = handle.read()
+            if marker in tail:
+                line = tail.split(marker, 1)[1].split("\n", 1)[0]
+                if TRUNCATION_MARKER in line:
+                    raise RuntimeError("a slice was still truncated; lower SLICE")
+                got = line.partition("SLICE")[2]
+                break
+        if got is None:
+            raise TimeoutError("no response for slice at offset %d" % start)
+        pieces.append(got)
+        start += SLICE
+    text = _unescape("".join(pieces))
+    if not text.strip():
+        raise RuntimeError("slices assembled to nothing")
+    return text

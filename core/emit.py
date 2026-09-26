@@ -83,6 +83,29 @@ def strip_overrides(body: str, override_keys: list[str]) -> str:
     return "".join(out)
 
 
+def check_wellformed(text: str) -> list[str]:
+    """Cheap structural checks before anything is written to disk.
+
+    The transport has bitten this twice: VLBridge truncates a reply past 8000
+    characters, and several `out()` calls in one reply get joined with newlines
+    that land inside string literals.  Both produce a file that looks fine at a
+    glance and is broken Lua, so refuse to write rather than emit one.
+    """
+    problems: list[str] = []
+    if "<truncated>" in text:
+        problems.append("the reply was truncated by the bridge")
+    body = text.split("return ", 1)[-1].rsplit("\nend", 1)[0]
+    if body.count("{") != body.count("}"):
+        problems.append("unbalanced braces: %d open, %d close"
+                        % (body.count("{"), body.count("}")))
+    for number, line in enumerate(body.splitlines(), 1):
+        if line.count("'") % 2 == 1:
+            problems.append("line %d has an unterminated string: %s"
+                            % (number, line.strip()[:60]))
+            break
+    return problems
+
+
 def render(name: str, body: str, consumer: str, child: str, refs: int,
            author: str = "reconstructed") -> str:
     provenance = PROVENANCE.format(name=name, refs=refs, consumer=consumer,

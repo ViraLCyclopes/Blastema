@@ -134,6 +134,12 @@ def cmd_build(dump: Dump, args) -> int:
 
     entry, child = sources[0]
     text = emit.render(base, body, entry, child, dump.reference_counts()[base])
+    problems = emit.check_wellformed(text)
+    if problems:
+        print("REFUSING to write - the reconstruction is malformed:")
+        for problem in problems:
+            print("   %s" % problem)
+        return 1
     for component, unknown in _schema_warnings(body):
         print("   WARNING %s declares no field(s): %s" % (component, unknown))
     os.makedirs(OUT_DIR, exist_ok=True)
