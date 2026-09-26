@@ -114,15 +114,8 @@ class Dump:
 
 
 def default_dump_path() -> str:
-    """The dump in the game root, newest version first."""
-    root = os.path.join(
-        "C:\\", "Program Files (x86)", "Steam", "steamapps", "common",
-        "Jurassic World Evolution 3",
-    )
-    candidates = sorted(
-        (f for f in os.listdir(root) if f.startswith("JWE3_") and f.endswith("_Prefabs.lua")),
-        reverse=True,
-    )
-    if not candidates:
-        raise FileNotFoundError("no JWE3_*_Prefabs.lua in the game root")
-    return os.path.join(root, candidates[0])
+    """The configured prefab dump; see core.settings for how it is found."""
+    from core.settings import DUMP_HELP, SETTINGS
+    if not SETTINGS.dump_path or not os.path.exists(SETTINGS.dump_path):
+        raise FileNotFoundError(DUMP_HELP)
+    return SETTINGS.dump_path

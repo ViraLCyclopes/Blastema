@@ -18,14 +18,15 @@ import os
 import re
 import xml.etree.ElementTree as ET
 
-# The kit's canonical copies, both extracted from GameMain/Main.ovl.  They live
-# in separate folders, so look in both.
-_GAMEMAIN = os.path.join(
-    "D:\\", "JWE2 Stuff", "Cobra Tool Versions", "Main Mod Kit",
-    "JWE 3 Luas", "Base Game", "GameMain",
-)
-SPECDEF_DIR = os.path.join(_GAMEMAIN, "Specdefs")
-ENUMNAMER_DIR = os.path.join(_GAMEMAIN, "Enumnamer")
+# Configured in core.settings; both ship inside GameMain/Main.ovl and the kit
+# keeps an extracted copy of each.
+def _dirs() -> tuple[str, str]:
+    from core.settings import SETTINGS
+    return (SETTINGS.specdef_dir or "", SETTINGS.enumnamer_dir or "")
+
+
+SPECDEF_DIR = None
+ENUMNAMER_DIR = None
 
 # SpecdefDtype -> the string a prefab Property's `Type` field wants.
 DTYPE_TO_PROPERTY_TYPE = {
@@ -57,10 +58,11 @@ class Field:
 
 
 class Schema:
-    def __init__(self, directory: str = SPECDEF_DIR,
-                 enum_directory: str = ENUMNAMER_DIR):
-        self.directory = directory
-        self.enum_directory = enum_directory
+    def __init__(self, directory: str | None = None,
+                 enum_directory: str | None = None):
+        detected = _dirs()
+        self.directory = directory or detected[0]
+        self.enum_directory = enum_directory or detected[1]
         self._specdefs: dict[str, list[Field]] = {}
         self._enums: dict[str, set[str]] = {}
 

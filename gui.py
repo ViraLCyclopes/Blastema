@@ -32,7 +32,19 @@ class App(tk.Tk):
         self.rows: list[tuple[str, int]] = []
         self.schema = self._load_schema()
         self._build()
-        self.after(100, lambda: self.load(default_dump_path()))
+        self.after(100, self._first_load)
+
+    def _first_load(self) -> None:
+        """Open the configured dump, or say plainly what is missing."""
+        from core.settings import SETTINGS
+        problems = SETTINGS.problems()
+        if SETTINGS.dump_path and os.path.exists(SETTINGS.dump_path):
+            self.load(SETTINGS.dump_path)
+            return
+        self.status.config(text="no prefab dump - use Settings")
+        messagebox.showinfo("Set up", "\n\n".join(problems) if problems else
+                            "Pick a prefab dump in Settings.")
+        self.settings()
 
     @staticmethod
     def _load_schema():
@@ -46,6 +58,7 @@ class App(tk.Tk):
     def _build(self) -> None:
         bar = ttk.Frame(self, padding=(8, 6))
         bar.pack(fill="x")
+        ttk.Button(bar, text="Settings...", command=self.settings).pack(side="left")
         ttk.Button(bar, text="Open dump...", command=self.pick).pack(side="left")
         ttk.Label(bar, text="  filter ").pack(side="left")
         self.filter_var = tk.StringVar()
@@ -89,12 +102,78 @@ class App(tk.Tk):
         panes.add(right, weight=4)
 
     # -- data ------------------------------------------------------------
+    def settings(self) -> None:
+        """Set the game folder, dump and schema folders; remembered on save."""
+        from core.settings import SETTINGS, dumps_in
+
+        window = tk.Toplevel(self)
+        window.title("Settings")
+        window.transient(self)
+        window.grab_set()
+        fields = [
+            ("Game folder (holds JWE3.exe)", "game_root", "dir"),
+            ("Prefab dump", "dump_path", "file"),
+            ("Specdefs folder", "specdef_dir", "dir"),
+            ("Enumnamers folder", "enumnamer_dir", "dir"),
+        ]
+        variables: dict[str, tk.StringVar] = {}
+        for row, (label, attribute, kind) in enumerate(fields):
+            ttk.Label(window, text=label).grid(row=row, column=0, sticky="w",
+                                               padx=8, pady=4)
+            variable = tk.StringVar(value=getattr(SETTINGS, attribute) or "")
+            variables[attribute] = variable
+            ttk.Entry(window, textvariable=variable, width=70).grid(
+                row=row, column=1, padx=4, pady=4)
+
+            def browse(v=variable, k=kind):
+                chosen = (filedialog.askdirectory() if k == "dir"
+                          else filedialog.askopenfilename(
+                              filetypes=[("Prefab dump", "*.lua"),
+                                         ("All files", "*.*")]))
+                if chosen:
+                    v.set(chosen)
+
+            ttk.Button(window, text="...", width=3, command=browse).grid(
+                row=row, column=2, padx=(0, 8))
+
+        note = ttk.Label(window, wraplength=620, foreground="#555",
+                         text="Leave a box empty to re-detect it. The game is "
+                              "found through Steam's library list; the dump is "
+                              "whatever JWE3_<version>_Prefabs.lua sits in the "
+                              "game folder.")
+        note.grid(row=len(fields), column=0, columnspan=3, sticky="w",
+                  padx=8, pady=(4, 0))
+
+        def apply() -> None:
+            for attribute, variable in variables.items():
+                setattr(SETTINGS, attribute, variable.get().strip() or None)
+            if not SETTINGS.dump_path:
+                found = dumps_in(SETTINGS.game_root or "")
+                SETTINGS.dump_path = found[0] if found else None
+            SETTINGS.save()
+            window.destroy()
+            problems = SETTINGS.problems()
+            if problems:
+                messagebox.showwarning("Settings", "\n\n".join(problems))
+            if SETTINGS.dump_path:
+                self.schema = self._load_schema()
+                self.load(SETTINGS.dump_path)
+
+        buttons = ttk.Frame(window, padding=(8, 8))
+        buttons.grid(row=len(fields) + 1, column=0, columnspan=3, sticky="e")
+        ttk.Button(buttons, text="Save", command=apply).pack(side="right")
+        ttk.Button(buttons, text="Cancel",
+                   command=window.destroy).pack(side="right", padx=6)
+
     def pick(self) -> None:
         path = filedialog.askopenfilename(
             title="Open a JWE3 prefab dump",
             filetypes=[("Prefab dump", "*.lua"), ("All files", "*.*")],
         )
         if path:
+            from core.settings import SETTINGS
+            SETTINGS.dump_path = path
+            SETTINGS.save()
             self.load(path)
 
     def load(self, path: str) -> None:

@@ -17,12 +17,29 @@ import random
 import re
 import time
 
-GAME_ROOT = os.path.join(
-    "C:\\", "Program Files (x86)", "Steam", "steamapps", "common",
-    "Jurassic World Evolution 3",
-)
-REQUEST_FILE = os.path.join(GAME_ROOT, "Dev", "Lua", "vlbridge_req.lua")
-LOG_FILE = os.path.join(GAME_ROOT, "Jurassic World Evolution 3.log")
+def _paths() -> tuple[str, str]:
+    """(request file, log file) for the configured game folder."""
+    from core.settings import SETTINGS
+    if not SETTINGS.game_root:
+        raise RuntimeError("Game folder not set - open Settings and pick it.")
+    return SETTINGS.request_file, SETTINGS.log_file
+
+
+class _Lazy:
+    """So REQUEST_FILE / LOG_FILE stay module attributes but follow settings."""
+
+    def __init__(self, index: int):
+        self.index = index
+
+    def __fspath__(self) -> str:
+        return _paths()[self.index]
+
+    def __str__(self) -> str:
+        return _paths()[self.index]
+
+
+REQUEST_FILE = _Lazy(0)
+LOG_FILE = _Lazy(1)
 
 # Serialises a prefab subtree as Lua source.  Kept as one string so the probe
 # stays a single request; the game is the scarce resource here, not bandwidth.
