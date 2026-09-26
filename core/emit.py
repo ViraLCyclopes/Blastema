@@ -52,7 +52,7 @@ PROVENANCE = """\
 --
 -- Source: the FLATTENED `{consumer}` / `{child}` read out of a live session,
 -- which is that base's real content.  Local overrides the consumer applies were
--- subtracted; see PrefabReconstructor.
+-- subtracted; see Blastema.
 """
 
 

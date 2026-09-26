@@ -1,6 +1,10 @@
-# PrefabReconstructor
+# Blastema
 
 Rebuilds a JWE3 **engine-side** prefab as a Lua one you can ship.
+
+A *blastema* is the mass of unspecialised cells that gathers at an
+amputation site and regrows the limb that was lost. This regrows a prefab
+the dump only kept the stump of.
 
 A prefab is engine-side when it is referenced as `Prefab = '<name>'` inside other
 prefabs but has no top-level definition in the dump. A Lua prefab cannot inherit
@@ -76,7 +80,7 @@ you and fills both folder boxes in.
 By hand, with cobra-tools:
 
     cd <cobra-tools>
-    python ovl_tool_cmd.py extract         "<game>/Win64/ovldata/GameMain/Main.ovl"         -o "<somewhere>" -g "Jurassic World Evolution 3"
+    python ovl_tool_cmd.py extract "<game>/Win64/ovldata/GameMain/Main.ovl" -o "<somewhere>" -g "Jurassic World Evolution 3"
 
 On JWE3 1.4.1 that yields **720 `.specdef`** and **213 `.enumnamer`** files.
 The kit already keeps a copy at
