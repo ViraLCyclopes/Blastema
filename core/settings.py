@@ -155,8 +155,16 @@ class Settings:
             issues.append(DUMP_HELP)
         elif not os.path.exists(self.dump_path):
             issues.append("The prefab dump no longer exists: %s" % self.dump_path)
-        if not self.specdef_dir:
-            issues.append("Specdefs folder not set - schema checks are off.")
+        if not self.specdef_dir or not os.path.isdir(self.specdef_dir):
+            from core.extract import HELP as SCHEMA_HELP
+            issues.append(
+                "Specdefs folder not set - schema checks are off.\n\n" + SCHEMA_HELP
+            )
+        if not self.enumnamer_dir or not os.path.isdir(self.enumnamer_dir):
+            issues.append(
+                "Enumnamers folder not set - a rotted enum name will not be "
+                "caught before the game silently rejects the prefab."
+            )
         return issues
 
 

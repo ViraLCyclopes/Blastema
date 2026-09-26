@@ -159,8 +159,34 @@ class App(tk.Tk):
                 self.schema = self._load_schema()
                 self.load(SETTINGS.dump_path)
 
+        def extract_schemas() -> None:
+            """Pull the specdefs and enumnamers out of GameMain/Main.ovl."""
+            from core import extract
+            root = variables["game_root"].get().strip() or SETTINGS.game_root
+            if not root:
+                messagebox.showwarning("Extract schemas", "Set the game folder first.")
+                return
+            target = filedialog.askdirectory(
+                title="Where should the schemas go?")
+            if not target:
+                return
+            try:
+                specs, enums = extract.extract(root, target)
+            except Exception as error:  # noqa: BLE001
+                messagebox.showerror("Extract schemas", str(error))
+                return
+            if specs:
+                variables["specdef_dir"].set(target)
+            if enums:
+                variables["enumnamer_dir"].set(target)
+            messagebox.showinfo(
+                "Extract schemas",
+                "Wrote %d specdefs and %d enumnamers to\n%s" % (specs, enums, target))
+
         buttons = ttk.Frame(window, padding=(8, 8))
         buttons.grid(row=len(fields) + 1, column=0, columnspan=3, sticky="e")
+        ttk.Button(buttons, text="Extract schemas...",
+                   command=extract_schemas).pack(side="left")
         ttk.Button(buttons, text="Save", command=apply).pack(side="right")
         ttk.Button(buttons, text="Cancel",
                    command=window.destroy).pack(side="right", padx=6)
